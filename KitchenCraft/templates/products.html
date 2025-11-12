@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KitchenCraft - Products</title>
+    <link rel="stylesheet" href="../static/css/style.css">
+</head>
+<body>
+    <header>
+        <div class="container header-container">
+            <div class="logo">
+                <img src="/static/images/logo.png" alt="KitchenCraft" class="logo-icon">
+                KitchenCraft
+            </div>
+            <nav>
+                <ul>
+                    <li><a href="home.html">Home</a></li>
+                    <li><a href="products.html">Products</a></li>
+                    <li><a href="cart.html">Cart (<span id="cart-count">0</span>)</a></li>
+                    <li><a href="status.html">Delivery Status</a></li>
+                    <li><a href="contact.html">Contact</a></li>
+                </ul>
+            </nav>
+            <button id="theme-toggle" class="theme-toggle">🌙</button>
+        </div>
+    </header>
+
+    <main>
+        <div class="container">
+            <h1 class="page-title">Products</h1>
+            
+            <!-- Products will be loaded dynamically -->
+            <div id="menu-container">
+                <!-- Items will be loaded here -->
+            </div>
+        </div>
+    </main>
+
+    <!-- Size Selection + Modifiers Modal -->
+    <div id="sizeModal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal">&times;</span>
+            <h3 id="modal-item-name">Select Options</h3>
+            <div class="size-options" id="size-options">
+                <div class="size-option" data-size="Regular">
+                    <input type="radio" id="size-regular" name="size" value="regular" checked>
+                    <label for="size-regular">Regular - ₱<span id="regular-price">49</span></label>
+                </div>
+                <div class="size-option" data-size="Large">
+                    <input type="radio" id="size-large" name="size" value="large">
+                    <label for="size-large">Large - ₱<span id="large-price">59</span></label>
+                </div>
+            </div>
+
+            <!-- Modifiers (hidden for kitchen products by default) -->
+            <div class="modifier-section" id="modifier-iced" style="display:none; margin-top: 12px;"></div>
+            <div class="modifier-section" id="modifier-milktea" style="display:none; margin-top: 12px;"></div>
+
+            <div class="quantity-selector">
+                <label for="quantity">Quantity:</label>
+                <div class="quantity-controls">
+                    <button type="button" class="quantity-btn" onclick="decreaseQuantity()">-</button>
+                    <input type="number" id="quantity" value="1" min="1" max="10">
+                    <button type="button" class="quantity-btn" onclick="increaseQuantity()">+</button>
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="addToCartWithSize()">Add to Cart</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Burger Options Modal (legacy/customization) -->
+    <div id="burgerModal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal">&times;</span>
+            <h3>Options</h3>
+            <div class="quantity-selector">
+                <label for="burger-quantity">Quantity:</label>
+                <div class="quantity-controls">
+                    <button type="button" class="quantity-btn" onclick="decreaseBurgerQuantity()">-</button>
+                    <input type="number" id="burger-quantity" value="1" min="1" max="10">
+                    <button type="button" class="quantity-btn" onclick="increaseBurgerQuantity()">+</button>
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-secondary" onclick="closeBurgerModal()">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="addBurgerToCart()">Add to Cart</button>
+            </div>
+        </div>
+    </div>    
+
+    <footer>
+        <div class="container footer-content">
+            <p>&copy; 2025 KitchenCraft. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <script src="../backend/store.js"></script>
+    <script src="../static/js/script.js"></script>
+    <script>
+        let menuItems = [];
+        let currentItem = null;
+        let currentCategoryKey = '';
+        let currentHasSizes = true;
+
+        // Load menu when page loads
+        document.addEventListener('DOMContentLoaded', async function() {
+            await loadMenuItems();
+            setupModalEventListeners();
+        });
+
+        async function loadMenuItems() {
+            try {
+                // getMenuItems is provided by backend/store.js or script.js shims
+                menuItems = await getMenuItems();
+                renderMenu();
+            } catch (error) {
+                console.error('Error loading menu:', error);
+                showNotification('Error loading products', 'error');
+            }
+        }
+
+        function humanizeCategory(key) {
+            return (key || 'uncategorized').split(/[-_\s]+/).map(part => part.charAt(0).toUpperCase() + part.slice(1)).join(' ');
+        }
+
+        function renderMenu() {
+            const container = document.getElementById('menu-container');
+            if (!container) return;
+            container.innerHTML = '';
+
+            // Group items by category
+            const categories = {};
+            (menuItems || []).forEach(item => {
+                const cat = item.category || 'uncategorized';
+                if (!categories[cat]) categories[cat] = [];
+                categories[cat].push(item);
+            });
+
+            Object.entries(categories).forEach(([categoryKey, items]) => {
+                if (!items || items.length === 0) return;
+
+                const categorySection = document.createElement('section');
+                categorySection.className = 'menu-category';
+                categorySection.innerHTML = `
+                    <div class="category-header">
+                        <h2 class="category-title">${humanizeCategory(categoryKey)}</h2>
+                    </div>
+                    <div class="menu-grid" id="grid-${categoryKey}"></div>
+                `;
+
+                container.appendChild(categorySection);
+
+                const grid = categorySection.querySelector(`#grid-${categoryKey}`);
+                items.forEach(item => {
+                    const itemElement = document.createElement('div');
+                    itemElement.className = 'menu-item';
+
+                    // Safe price rendering
+                    let priceHTML = 'Price N/A';
+                    try {
+                        if (item.sizes && typeof item.sizes === 'object') {
+                            const sizes = Object.entries(item.sizes);
+                            priceHTML = sizes.map(([size, price]) => `₱${Number(price)} (${size.charAt(0).toUpperCase() + size.slice(1)})`).join(' • ');
+                        } else if (item.options && typeof item.options === 'object') {
+                            const options = Object.entries(item.options);
+                            priceHTML = options.map(([option, price]) => `₱${Number(price)} (${option})`).join(' • ');
+                        } else if (item.price != null && !isNaN(Number(item.price))) {
+                            priceHTML = `₱${Number(item.price).toFixed(2)}`;
+                        }
+                    } catch (e) {
+                        console.warn('Error rendering price for', item, e);
+                    }
+
+                    const imgDiv = document.createElement('div');
+                    imgDiv.className = 'item-image';
+                    const img = document.createElement('img');
+                    img.src = item.image || '/static/images/placeholder.jpg';
+                    img.alt = item.name || '';
+                    img.onerror = function() { this.src = '/static/images/placeholder.jpg'; };
+                    imgDiv.appendChild(img);
+
+                    const detailsDiv = document.createElement('div');
+                    detailsDiv.className = 'item-details';
+                    const nameDiv = document.createElement('div');
+                    nameDiv.className = 'item-name';
+                    nameDiv.textContent = item.name || 'Unnamed item';
+                    const priceDiv = document.createElement('div');
+                    priceDiv.className = 'item-price';
+                    priceDiv.innerHTML = priceHTML;
+
+                    const btn = document.createElement('button');
+                    btn.className = 'btn add-to-cart';
+                    btn.textContent = 'Add to Cart';
+
+                    if (item.sizes && typeof item.sizes === 'object') {
+                        btn.addEventListener('click', () => showSizeModal(item.name, item.sizes || {}, categoryKey, true));
+                    } else if (item.options && typeof item.options === 'object') {
+                        btn.textContent = 'Customize & Add';
+                        btn.addEventListener('click', () => showBurgerModal());
+                    } else {
+                        const price = Number(item.price) || 0;
+                        btn.addEventListener('click', () => addToCart(item.name, price));
+                    }
+
+                    detailsDiv.appendChild(nameDiv);
+                    detailsDiv.appendChild(priceDiv);
+                    detailsDiv.appendChild(btn);
+
+                    itemElement.appendChild(imgDiv);
+                    itemElement.appendChild(detailsDiv);
+
+                    grid.appendChild(itemElement);
+                });
+            });
+        }
+
+        // Modal functions
+        function showSizeModal(itemName, sizesObj = {}, categoryKey = '', hasSizes = true) {
+            currentItem = itemName;
+            currentCategoryKey = categoryKey || '';
+            currentHasSizes = !!hasSizes;
+
+            document.getElementById('modal-item-name').textContent = itemName;
+            const sizeOptions = document.getElementById('size-options');
+            sizeOptions.innerHTML = '';
+
+            if (currentHasSizes && sizesObj && Object.keys(sizesObj).length > 0) {
+                sizeOptions.style.display = 'block';
+                let first = true;
+                Object.entries(sizesObj).forEach(([sizeKey, price]) => {
+                    const id = `size-${sizeKey.replace(/\s|\"|\'/g, '-')}`;
+                    const wrapper = document.createElement('div');
+                    wrapper.className = 'size-option';
+                    const input = document.createElement('input');
+                    input.type = 'radio';
+                    input.name = 'size';
+                    input.id = id;
+                    input.value = sizeKey;
+                    input.dataset.price = Number(price) || 0;
+                    if (first) { input.checked = true; first = false; }
+                    const label = document.createElement('label');
+                    label.setAttribute('for', id);
+                    label.innerHTML = `${sizeKey} - ₱${Number(price).toFixed(2)}`;
+                    wrapper.appendChild(input);
+                    wrapper.appendChild(label);
+                    sizeOptions.appendChild(wrapper);
+                });
+            } else {
+                sizeOptions.style.display = 'none';
+            }
+
+            const modIced = document.getElementById('modifier-iced');
+            const modMilk = document.getElementById('modifier-milktea');
+            if (modIced) modIced.style.display = 'none';
+            if (modMilk) modMilk.style.display = 'none';
+
+            document.getElementById('quantity').value = 1;
+            document.getElementById('sizeModal').style.display = 'block';
+        }
+
+        function showBurgerModal() {
+            document.getElementById('burgerModal').style.display = 'block';
+            document.getElementById('burger-quantity').value = 1;
+        }
+
+        function closeModal() { document.getElementById('sizeModal').style.display = 'none'; }
+        function closeBurgerModal() { document.getElementById('burgerModal').style.display = 'none'; }
+
+        function increaseQuantity() {
+            const qi = document.getElementById('quantity');
+            if (qi && qi.value < 10) qi.value = parseInt(qi.value) + 1;
+        }
+        function decreaseQuantity() {
+            const qi = document.getElementById('quantity');
+            if (qi && qi.value > 1) qi.value = parseInt(qi.value) - 1;
+        }
+        function increaseBurgerQuantity() { const qi = document.getElementById('burger-quantity'); if (qi && qi.value < 10) qi.value = parseInt(qi.value) + 1; }
+        function decreaseBurgerQuantity() { const qi = document.getElementById('burger-quantity'); if (qi && qi.value > 1) qi.value = parseInt(qi.value) - 1; }
+
+        function addToCartWithSize() {
+            const selectedInput = document.querySelector('input[name="size"]:checked');
+            const selectedSize = selectedInput ? selectedInput.value : null;
+            const quantity = parseInt(document.getElementById('quantity').value) || 1;
+            const price = selectedInput ? Number(selectedInput.dataset.price) || 0 : 0;
+
+            let nameParts = [currentItem];
+            if (currentHasSizes && selectedSize) nameParts.push(`(${selectedSize})`);
+            const itemName = nameParts.join(' ');
+
+            addToCart(itemName, price, quantity);
+            closeModal();
+        }
+
+        function addBurgerToCart() {
+            const selectedType = document.querySelector('input[name="burger-type"]:checked')?.value || 'plain';
+            const quantity = parseInt(document.getElementById('burger-quantity').value) || 1;
+            const price = selectedType === 'plain' ? 35 : 38;
+            const itemName = selectedType === 'plain' ? 'Burger' : 'Burger with Cheese';
+            addToCart(itemName, price, quantity);
+            closeBurgerModal();
+        }
+
+        function setupModalEventListeners() {
+            window.onclick = function(event) {
+                const sizeModal = document.getElementById('sizeModal');
+                const burgerModal = document.getElementById('burgerModal');
+                if (event.target === sizeModal) closeModal();
+                if (event.target === burgerModal) closeBurgerModal();
+            };
+            document.addEventListener('keydown', function(event) { if (event.key === 'Escape') { closeModal(); closeBurgerModal(); } });
+            document.querySelectorAll('.close-modal').forEach(closeBtn => closeBtn.addEventListener('click', () => { closeModal(); closeBurgerModal(); }));
+        }
+    </script>
+</body>
+</html>

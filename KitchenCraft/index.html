@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KitchenCraft - Login</title>
+    <link rel="stylesheet" href="static/css/style.css">
+</head>
+<body>
+    <header>
+        <div class="container header-container">
+            <div class="logo">
+                <img src="static/images/logo.png" alt="KitchenCraft" class="logo-icon">
+                KitchenCraft
+            </div>
+            <button id="theme-toggle" class="theme-toggle">🌙</button>
+        </div>
+    </header>
+
+    <main>
+        <div class="container">
+            <h1 class="page-title">KitchenCraft</h1>
+            <div class="form-container">
+                <h2>Log In</h2>
+                <form id="login-form">
+                    <div class="form-group">
+                        <label for="username">Username</label>
+                        <input type="text" id="username" placeholder="User Name" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="password">Password</label>
+                        <input type="password" id="password" placeholder="Password" required>
+                    </div>
+                    <button type="submit" class="btn">Enter</button>
+                </form>
+                <div class="auth-actions">
+                    <a href="templates/forgotpassword.html" class="link-button">Forgot password?</a>
+                    <a href="templates/register.html" class="btn btn-ghost">Create account</a>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        <div class="container footer-content">
+            <p>&copy; 2025 KitchenCraft. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <script src="backend/store.js"></script>
+    <script src="static/js/script.js"></script>
+    <script>
+        document.getElementById('login-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            
+            console.log('Login attempt for username:', username);
+            
+            try {
+                const users = await loadUsers();
+                console.log('Available users:', users.map(u => ({ username: u.username, role: u.role })));
+                
+                const user = users.find(u => u.username === username && u.password === password);
+
+                if (user) {
+                    // Riders are not supposed to log in — they exist only for assignment
+                    if ((user.role || '').toString().toLowerCase() === 'rider') {
+                        console.log('Login blocked for rider account:', user.username);
+                        alert('Rider accounts cannot log in here. Please use the admin interface to manage riders.');
+                        return;
+                    }
+
+                    console.log('Login successful for', user.username, 'with role', user.role);
+                    const { password, ...userSession } = user;
+                    localStorage.setItem('currentUser', JSON.stringify(userSession));
+                    window.location.href = 'templates/home.html';
+                } else {
+                    console.log('Login failed - Invalid credentials');
+                    alert('Invalid username or password!');
+                }
+            } catch (error) {
+                console.error('Login error:', error);
+                alert('Error during login. Please try again.');
+            }
+        });
+    </script>
+    
+</body>
+</html>
