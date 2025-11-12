@@ -7,52 +7,52 @@
 
     // Initial seed data for products (Minecraft-themed kitchen items)
     const defaultMenu = [
-        // Essentials
+        // Essentials (more affordable prices)
         {
             category: 'essentials',
-            name: 'Chef\u2019s Knife',
-            sizes: { '6"': 400, '8"': 600, '10"': 800 },
+            name: 'Chef\u0019s Knife',
+            sizes: { '6"': 200, '8"': 300, '10"': 400 },
             image: '/static/images/knife.png'
         },
-        { category: 'essentials', name: 'Wood Cutting Board', price: 450, image: '/static/images/cuttingboard.png' },
+        { category: 'essentials', name: 'Wood Cutting Board', price: 225, image: '/static/images/cuttingboard.png' },
         {
             category: 'essentials',
             name: 'Nonstick Frying Pan',
-            sizes: { '8"': 450, '10"': 600, '12"': 750 },
+            sizes: { '8"': 225, '10"': 300, '12"': 375 },
             image: '/static/images/fryingpan.png'
         },
-        { category: 'essentials', name: 'Measuring Cups (set)', price: 350, image: '/static/images/measuringcups.png' },
-        { category: 'essentials', name: 'Spoons (set)', price: 250, image: '/static/images/spoons.png' },
+        { category: 'essentials', name: 'Measuring Cups (set)', price: 175, image: '/static/images/measuringcups.png' },
+        { category: 'essentials', name: 'Spoons (set)', price: 125, image: '/static/images/spoons.png' },
 
-        // Small Appliances
-        { category: 'appliances', name: 'Air Fryer', price: 5200, image: '/static/images/airfryer.png' },
-        { category: 'appliances', name: 'Blender', price: 3200, image: '/static/images/blender.png' },
-        { category: 'appliances', name: 'Electric Kettle', price: 1500, image: '/static/images/kettle.png' },
-        { category: 'appliances', name: 'Toaster Oven', price: 4200, image: '/static/images/toasteroven.png' },
-        { category: 'appliances', name: 'Coffee Maker', price: 2800, image: '/static/images/coffeemaker.png' },
+        // Small Appliances (reduced)
+        { category: 'appliances', name: 'Air Fryer', price: 2600, image: '/static/images/airfryer.png' },
+        { category: 'appliances', name: 'Blender', price: 1600, image: '/static/images/blender.png' },
+        { category: 'appliances', name: 'Electric Kettle', price: 750, image: '/static/images/kettle.png' },
+        { category: 'appliances', name: 'Toaster Oven', price: 2100, image: '/static/images/toasteroven.png' },
+        { category: 'appliances', name: 'Coffee Maker', price: 1400, image: '/static/images/coffeemaker.png' },
 
         // Gadgets & Tools
-        { category: 'gadgets', name: 'Digital Instant-Read Thermometer', price: 850, image: '/static/images/thermometer.png' },
-        { category: 'gadgets', name: 'Tongs', price: 220, image: '/static/images/tong.png' },
-        { category: 'gadgets', name: 'Whisk', price: 180, image: '/static/images/whisk.png' },
-        { category: 'gadgets', name: 'Microplane Zester', price: 600, image: '/static/images/zester.png' },
-        { category: 'gadgets', name: 'Vegetable Peeler', price: 140, image: '/static/images/peeler.png' },
+        { category: 'gadgets', name: 'Digital Instant-Read Thermometer', price: 425, image: '/static/images/thermometer.png' },
+        { category: 'gadgets', name: 'Tongs', price: 110, image: '/static/images/tong.png' },
+        { category: 'gadgets', name: 'Whisk', price: 90, image: '/static/images/whisk.png' },
+        { category: 'gadgets', name: 'Microplane Zester', price: 300, image: '/static/images/zester.png' },
+        { category: 'gadgets', name: 'Vegetable Peeler', price: 70, image: '/static/images/peeler.png' },
 
         // Storage & Cleaning
         {
             category: 'storage',
             name: 'Airtight Food Storage Container Set',
-            sizes: { 'Small': 350, 'Medium': 500, 'Large': 700 },
+            sizes: { 'Small': 175, 'Medium': 250, 'Large': 350 },
             image: '/static/images/container.png'
         },
         {
             category: 'storage',
             name: 'Glass Storage Jars',
-            sizes: { 'Small': 250, 'Medium': 350, 'Large': 450 },
+            sizes: { 'Small': 125, 'Medium': 175, 'Large': 225 },
             image: '/static/images/jar.png'
         },
-        { category: 'storage', name: 'Dish Drying Rack', price: 650, image: '/static/images/rack.png' },
-        { category: 'storage', name: 'Sponge', price: 60, image: '/static/images/sponge.png' }
+        { category: 'storage', name: 'Dish Drying Rack', price: 325, image: '/static/images/rack.png' },
+        { category: 'storage', name: 'Sponge', price: 30, image: '/static/images/sponge.png' }
     ];
 
     // Default users - admin and a customer
