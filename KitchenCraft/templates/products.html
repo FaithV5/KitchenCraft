@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KitchenCraft - Products</title>
+    <link rel="stylesheet" href="../static/css/style.css">
+</head>
+<body>
+    <header>
+        <div class="container header-container">
+            <div class="logo">
+                <img src="/static/images/logo.png" alt="KitchenCraft" class="logo-icon">
+                KitchenCraft
+            </div>
+            <nav>
+                <ul>
+                    <li><a href="/index.html">Home</a></li>
+                    <li><a href="products.html">Products</a></li>
+                    <li><a href="cart.html">Cart (<span id="cart-count">0</span>)</a></li>
+                    <li><a href="status.html">Delivery Status</a></li>
+                    <li><a href="contact.html">Contact</a></li>
+                </ul>
+            </nav>
+            <div id="auth-links" class="auth-links"></div>
+            <!-- Header logout button (hidden when not logged in) -->
+            <button id="header-logout" class="btn-logout" style="display:none; margin-left:8px;">Logout</button>
+            <button id="theme-toggle" class="theme-toggle">🌙</button>
+        </div>
+    </header>
+
+    <main>
+        <div class="container">
+            <h1 class="page-title">Products</h1>
+            
+            <!-- Products will be loaded dynamically -->
+            <div id="menu-container">
+                <!-- Items will be loaded here -->
+            </div>
+        </div>
+    </main>
+
+    <!-- Size Selection + Modifiers Modal -->
+    <div id="sizeModal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal">&times;</span>
+            <h3 id="modal-item-name">Select Options</h3>
+            <div class="size-options" id="size-options">
+                <div class="size-option" data-size="Regular">
+                    <input type="radio" id="size-regular" name="size" value="regular" checked>
+                    <label for="size-regular">Regular - ₱<span id="regular-price">49</span></label>
+                </div>
+                <div class="size-option" data-size="Large">
+                    <input type="radio" id="size-large" name="size" value="large">
+                    <label for="size-large">Large - ₱<span id="large-price">59</span></label>
+                </div>
+            </div>
+
+            <!-- Modifiers (hidden for kitchen products by default) -->
+            <div class="modifier-section" id="modifier-iced" style="display:none; margin-top: 12px;"></div>
+            <div class="modifier-section" id="modifier-milktea" style="display:none; margin-top: 12px;"></div>
+
+            <div class="quantity-selector">
+                <label for="quantity">Quantity:</label>
+                <div class="quantity-controls">
+                    <button type="button" class="quantity-btn" onclick="decreaseQuantity()">-</button>
+                    <input type="number" id="quantity" value="1" min="1" max="10">
+                    <button type="button" class="quantity-btn" onclick="increaseQuantity()">+</button>
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="addToCartWithSize()">Add to Cart</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Burger Options Modal (legacy/customization) -->
+    <div id="burgerModal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal">&times;</span>
+            <h3>Options</h3>
+            <div class="quantity-selector">
+                <label for="burger-quantity">Quantity:</label>
+                <div class="quantity-controls">
+                    <button type="button" class="quantity-btn" onclick="decreaseBurgerQuantity()">-</button>
+                    <input type="number" id="burger-quantity" value="1" min="1" max="10">
+                    <button type="button" class="quantity-btn" onclick="increaseBurgerQuantity()">+</button>
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-secondary" onclick="closeBurgerModal()">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="addBurgerToCart()">Add to Cart</button>
+            </div>
+        </div>
+    </div>    
+
+    <footer>
+        <div class="container footer-content">
+            <p>&copy; 2025 KitchenCraft. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <script src="../backend/store.js"></script>
+    <script src="../static/js/script.js"></script>
+    <script>
+        let menuItems = [];
+        let allReviews = [];
+        let currentItem = null;
+        let currentCategoryKey = '';
+        let currentHasSizes = true;
+
+        // Load menu when page loads
+        document.addEventListener('DOMContentLoaded', async function() {
+            await loadMenuItems();
+            setupModalEventListeners();
+        });
+
+        async function loadMenuItems() {
+            try {
+                // getMenuItems is provided by backend/store.js or script.js shims
+                menuItems = await getMenuItems();
+                // load product reviews so we can compute average ratings
+                try {
+                    if (typeof loadReviews === 'function') {
+                        allReviews = await loadReviews();
+                    } else if (typeof getOrders === 'function') {
+                        // fallback: extract reviews from orders if reviews API missing
+                        const orders = await getOrders();
+                        allReviews = [];
+                        (orders || []).forEach(o => { try { (o.reviews || []).forEach(r => allReviews.push(r)); } catch(e){} });
+                    }
+                } catch (e) { console.warn('Failed to load reviews:', e); allReviews = []; }
+
+                renderMenu();
+            } catch (error) {
+                console.error('Error loading menu:', error);
+                showNotification('Error loading products', 'error');
+            }
+        }
+
+        // Compute average rating and count for a given product name
+        function computeAverageRating(productName) {
+            try {
+                if (!productName) return null;
+                const matches = (allReviews || []).filter(r => r && r.product === productName && typeof r.rating === 'number');
+                if (!matches || matches.length === 0) return null;
+                const sum = matches.reduce((s, x) => s + Number(x.rating || 0), 0);
+                const avg = Math.round((sum / matches.length) * 10) / 10; // one decimal
+                return { avg: avg, count: matches.length };
+            } catch (e) {
+                return null;
+            }
+        }
+
+        // Create a star graphic element representing the average (supports partial stars)
+        function createRatingElement(productName) {
+            const ratingInfo = computeAverageRating(productName);
+            const wrapper = document.createElement('div');
+            wrapper.className = 'rating-widget';
+            if (!ratingInfo) {
+                wrapper.textContent = 'No ratings yet';
+                return wrapper;
+            }
+
+            // Render SVG stars (one per position) with per-star partial fills
+            const stars = document.createElement('span');
+            stars.className = 'stars-svg';
+            const avg = Number(ratingInfo.avg) || 0;
+            // create unique id base for clipPaths to avoid collisions
+            const uidBase = `s${Date.now().toString(36)}${Math.floor(Math.random()*1000)}`;
+            for (let i = 1; i <= 5; i++) {
+                const starWrap = document.createElement('span');
+                starWrap.className = 'star-svg-wrap';
+
+                const svgNS = 'http://www.w3.org/2000/svg';
+                const svg = document.createElementNS(svgNS, 'svg');
+                svg.setAttribute('viewBox', '0 0 24 24');
+                svg.setAttribute('width', '18');
+                svg.setAttribute('height', '18');
+                svg.setAttribute('aria-hidden', 'true');
+
+                const defs = document.createElementNS(svgNS, 'defs');
+                const clip = document.createElementNS(svgNS, 'clipPath');
+                const clipId = `${uidBase}-c${i}`;
+                clip.setAttribute('id', clipId);
+                const rect = document.createElementNS(svgNS, 'rect');
+                rect.setAttribute('x', '0');
+                rect.setAttribute('y', '0');
+                rect.setAttribute('width', '100%');
+                rect.setAttribute('height', '100%');
+                clip.appendChild(rect);
+                defs.appendChild(clip);
+
+                // grey star (background)
+                const pathBg = document.createElementNS(svgNS, 'path');
+                pathBg.setAttribute('d', 'M12 .587l3.668 7.431 8.2 1.192-5.934 5.788 1.402 8.175L12 18.896l-7.336 3.877 1.402-8.175L.132 9.21l8.2-1.192z');
+                pathBg.setAttribute('fill', '#cfcfcf');
+
+                // colored star (foreground) clipped for partials
+                const pathFg = document.createElementNS(svgNS, 'path');
+                pathFg.setAttribute('d', 'M12 .587l3.668 7.431 8.2 1.192-5.934 5.788 1.402 8.175L12 18.896l-7.336 3.877 1.402-8.175L.132 9.21l8.2-1.192z');
+                pathFg.setAttribute('fill', getComputedStyle(document.documentElement).getPropertyValue('--secondary-color') || '#a67c00');
+
+                defs.appendChild(clip);
+                svg.appendChild(defs);
+                svg.appendChild(pathBg);
+
+                // compute fill for this star
+                const remainder = Math.max(0, Math.min(1, avg - (i - 1)));
+                if (remainder >= 1) {
+                    // full star
+                    svg.appendChild(pathFg);
+                } else if (remainder > 0) {
+                    // partial star: clone fg and apply clipPath with width percentage
+                    const fgGroup = document.createElementNS(svgNS, 'g');
+                    const clipRect = document.createElementNS(svgNS, 'rect');
+                    // adjust clip rect width to remainder percent of viewBox width (24)
+                    const clipWidth = (remainder * 24).toString();
+                    clipRect.setAttribute('x', '0');
+                    clipRect.setAttribute('y', '0');
+                    clipRect.setAttribute('width', clipWidth);
+                    clipRect.setAttribute('height', '24');
+                    // unique clipPath per star
+                    const clip2 = document.createElementNS(svgNS, 'clipPath');
+                    const clip2Id = `${uidBase}-p${i}`;
+                    clip2.setAttribute('id', clip2Id);
+                    clip2.appendChild(clipRect);
+                    defs.appendChild(clip2);
+                    const pathFgPartial = pathFg.cloneNode();
+                    pathFgPartial.setAttribute('clip-path', `url(#${clip2Id})`);
+                    svg.appendChild(pathFgPartial);
+                }
+
+                starWrap.appendChild(svg);
+                stars.appendChild(starWrap);
+            }
+
+            const meta = document.createElement('small');
+            meta.className = 'rating-count';
+            meta.textContent = ` ${ratingInfo.avg} (${ratingInfo.count})`;
+
+            wrapper.appendChild(stars);
+            wrapper.appendChild(meta);
+            return wrapper;
+        }
+
+
+
+        function renderMenu() {
+            const container = document.getElementById('menu-container');
+            if (!container) return;
+            container.innerHTML = '';
+
+            // Group items by category
+            const categories = {};
+            (menuItems || []).forEach(item => {
+                const cat = item.category || 'uncategorized';
+                if (!categories[cat]) categories[cat] = [];
+                categories[cat].push(item);
+            });
+
+            Object.entries(categories).forEach(([categoryKey, items]) => {
+                if (!items || items.length === 0) return;
+
+                const categorySection = document.createElement('section');
+                categorySection.className = 'menu-category';
+                categorySection.innerHTML = `
+                    <div class="category-header">
+                        <h2 class="category-title">${humanizeCategory(categoryKey)}</h2>
+                    </div>
+                    <div class="menu-grid" id="grid-${categoryKey}"></div>
+                `;
+
+                container.appendChild(categorySection);
+
+                const grid = categorySection.querySelector(`#grid-${categoryKey}`);
+                items.forEach(item => {
+                    const itemElement = document.createElement('div');
+                    itemElement.className = 'menu-item';
+
+                    // Safe price rendering
+                    let priceHTML = 'Price N/A';
+                    try {
+                        if (item.sizes && typeof item.sizes === 'object') {
+                            const sizes = Object.entries(item.sizes);
+                            priceHTML = sizes.map(([size, price]) => `₱${Number(price)} (${size.charAt(0).toUpperCase() + size.slice(1)})`).join(' • ');
+                        } else if (item.options && typeof item.options === 'object') {
+                            const options = Object.entries(item.options);
+                            priceHTML = options.map(([option, price]) => `₱${Number(price)} (${option})`).join(' • ');
+                        } else if (item.price != null && !isNaN(Number(item.price))) {
+                            priceHTML = `₱${Number(item.price).toFixed(2)}`;
+                        }
+                    } catch (e) {
+                        console.warn('Error rendering price for', item, e);
+                    }
+
+                    const imgDiv = document.createElement('div');
+                    imgDiv.className = 'item-image';
+                    const img = document.createElement('img');
+                    img.src = item.image || '/static/images/placeholder.jpg';
+                    img.alt = item.name || '';
+                    img.onerror = function() { this.src = '/static/images/placeholder.jpg'; };
+                    imgDiv.appendChild(img);
+
+                    const detailsDiv = document.createElement('div');
+                    detailsDiv.className = 'item-details';
+                    const nameDiv = document.createElement('div');
+                    nameDiv.className = 'item-name';
+                    nameDiv.textContent = item.name || 'Unnamed item';
+                    const priceDiv = document.createElement('div');
+                    priceDiv.className = 'item-price';
+                    priceDiv.innerHTML = priceHTML;
+
+                    // Rating display (average from inline reviews)
+                    const ratingDiv = document.createElement('div');
+                    ratingDiv.className = 'item-rating';
+                    try {
+                        const ratingElem = createRatingElement(item.name);
+                        ratingDiv.appendChild(ratingElem);
+                    } catch (e) {
+                        ratingDiv.textContent = '';
+                    }
+
+                    // Stock indicator and admin edit
+                    const stockDiv = document.createElement('div');
+                    stockDiv.className = 'item-stock';
+                    const stockCount = (typeof item.stock === 'number') ? item.stock : null;
+                    // If not admin and stock is explicitly 0, hide the item (do not render for browsing customers)
+                    const currentUser = (typeof getCurrentUser === 'function') ? getCurrentUser() : null;
+                    const isAdmin = currentUser && currentUser.role === 'admin';
+                    if (stockCount === 0 && !isAdmin) {
+                        // skip adding this item for non-admin viewers
+                        return;
+                    }
+                    stockDiv.textContent = stockCount != null ? `Stock: ${stockCount}` : '';
+
+                    const btn = document.createElement('button');
+                    btn.className = 'btn add-to-cart';
+                    btn.textContent = 'Add to Cart';
+
+                    if (item.sizes && typeof item.sizes === 'object') {
+                        btn.addEventListener('click', () => showSizeModal(item.name, item.sizes || {}, categoryKey, true));
+                        if (stockCount != null && stockCount <= 0) btn.disabled = true;
+                    } else if (item.options && typeof item.options === 'object') {
+                        btn.textContent = 'Customize & Add';
+                        btn.addEventListener('click', () => showBurgerModal());
+                        if (stockCount != null && stockCount <= 0) btn.disabled = true;
+                    } else {
+                        const price = Number(item.price) || 0;
+                        btn.addEventListener('click', () => addToCart(item.name, price));
+                        if (stockCount != null && stockCount <= 0) btn.disabled = true;
+                    }
+
+                    detailsDiv.appendChild(nameDiv);
+                    detailsDiv.appendChild(priceDiv);
+                    detailsDiv.appendChild(ratingDiv);
+
+                    if (isAdmin) {
+                        // Admin can edit stock inline
+                        const stockInput = document.createElement('input');
+                        stockInput.type = 'number';
+                        stockInput.min = 0;
+                        stockInput.value = (stockCount != null) ? stockCount : 0;
+                        stockInput.className = 'stock-input';
+                        stockInput.style.width = '80px';
+                        stockInput.style.margin = '8px 6px';
+
+                        const saveBtn = document.createElement('button');
+                        saveBtn.className = 'btn btn-secondary';
+                        saveBtn.textContent = 'Save';
+                        saveBtn.style.marginLeft = '6px';
+                        saveBtn.addEventListener('click', async () => {
+                            const newStock = Number(stockInput.value || 0);
+                            await updateStock(item.name, newStock);
+                        });
+
+                        detailsDiv.appendChild(stockInput);
+                        detailsDiv.appendChild(saveBtn);
+                    } else {
+                        detailsDiv.appendChild(stockDiv);
+                    }
+
+                    detailsDiv.appendChild(btn);
+
+                    itemElement.appendChild(imgDiv);
+                    itemElement.appendChild(detailsDiv);
+
+                    grid.appendChild(itemElement);
+                });
+            });
+        }
+
+        // Modal functions
+        function showSizeModal(itemName, sizesObj = {}, categoryKey = '', hasSizes = true) {
+            // Prevent opening selection modal for unauthenticated users
+            try {
+                if (!getCurrentUser()) {
+                    showNotification('Login to order', 'error');
+                    return;
+                }
+            } catch (e) {}
+            currentItem = itemName;
+            currentCategoryKey = categoryKey || '';
+            currentHasSizes = !!hasSizes;
+
+            document.getElementById('modal-item-name').textContent = itemName;
+            const sizeOptions = document.getElementById('size-options');
+            sizeOptions.innerHTML = '';
+
+            if (currentHasSizes && sizesObj && Object.keys(sizesObj).length > 0) {
+                sizeOptions.style.display = 'block';
+                let first = true;
+                Object.entries(sizesObj).forEach(([sizeKey, price]) => {
+                    const id = `size-${sizeKey.replace(/\s|\"|\'/g, '-')}`;
+                    const wrapper = document.createElement('div');
+                    wrapper.className = 'size-option';
+                    const input = document.createElement('input');
+                    input.type = 'radio';
+                    input.name = 'size';
+                    input.id = id;
+                    input.value = sizeKey;
+                    input.dataset.price = Number(price) || 0;
+                    if (first) { input.checked = true; first = false; }
+                    const label = document.createElement('label');
+                    label.setAttribute('for', id);
+                    label.innerHTML = `${sizeKey} - ₱${Number(price).toFixed(2)}`;
+                    wrapper.appendChild(input);
+                    wrapper.appendChild(label);
+                    sizeOptions.appendChild(wrapper);
+                });
+            } else {
+                sizeOptions.style.display = 'none';
+            }
+
+            const modIced = document.getElementById('modifier-iced');
+            const modMilk = document.getElementById('modifier-milktea');
+            if (modIced) modIced.style.display = 'none';
+            if (modMilk) modMilk.style.display = 'none';
+
+            document.getElementById('quantity').value = 1;
+            document.getElementById('sizeModal').style.display = 'block';
+        }
+
+        function showBurgerModal() {
+            // Prevent opening customization modal for unauthenticated users
+            try {
+                if (!getCurrentUser()) {
+                    showNotification('Login to order', 'error');
+                    return;
+                }
+            } catch (e) {}
+            document.getElementById('burgerModal').style.display = 'block';
+            document.getElementById('burger-quantity').value = 1;
+        }
+
+        function closeModal() { document.getElementById('sizeModal').style.display = 'none'; }
+        function closeBurgerModal() { document.getElementById('burgerModal').style.display = 'none'; }
+
+        function increaseQuantity() {
+            const qi = document.getElementById('quantity');
+            if (qi && qi.value < 10) qi.value = parseInt(qi.value) + 1;
+        }
+        function decreaseQuantity() {
+            const qi = document.getElementById('quantity');
+            if (qi && qi.value > 1) qi.value = parseInt(qi.value) - 1;
+        }
+        function increaseBurgerQuantity() { const qi = document.getElementById('burger-quantity'); if (qi && qi.value < 10) qi.value = parseInt(qi.value) + 1; }
+        function decreaseBurgerQuantity() { const qi = document.getElementById('burger-quantity'); if (qi && qi.value > 1) qi.value = parseInt(qi.value) - 1; }
+
+        function addToCartWithSize() {
+            const selectedInput = document.querySelector('input[name="size"]:checked');
+            const selectedSize = selectedInput ? selectedInput.value : null;
+            const quantity = parseInt(document.getElementById('quantity').value) || 1;
+            const price = selectedInput ? Number(selectedInput.dataset.price) || 0 : 0;
+
+            let nameParts = [currentItem];
+            if (currentHasSizes && selectedSize) nameParts.push(`(${selectedSize})`);
+            const itemName = nameParts.join(' ');
+
+            addToCart(itemName, price, quantity);
+            closeModal();
+        }
+
+        function addBurgerToCart() {
+            const selectedType = document.querySelector('input[name="burger-type"]:checked')?.value || 'plain';
+            const quantity = parseInt(document.getElementById('burger-quantity').value) || 1;
+            const price = selectedType === 'plain' ? 35 : 38;
+            const itemName = selectedType === 'plain' ? 'Burger' : 'Burger with Cheese';
+            addToCart(itemName, price, quantity);
+            closeBurgerModal();
+        }
+
+        function setupModalEventListeners() {
+            window.onclick = function(event) {
+                const sizeModal = document.getElementById('sizeModal');
+                const burgerModal = document.getElementById('burgerModal');
+                if (event.target === sizeModal) closeModal();
+                if (event.target === burgerModal) closeBurgerModal();
+            };
+            document.addEventListener('keydown', function(event) { if (event.key === 'Escape') { closeModal(); closeBurgerModal(); } });
+            document.querySelectorAll('.close-modal').forEach(closeBtn => closeBtn.addEventListener('click', () => { closeModal(); closeBurgerModal(); }));
+        }
+
+        // Update stock for a menu item (admin action)
+        async function updateStock(itemName, newStock) {
+            try {
+                const menu = await getMenuItems();
+                const idx = (menu || []).findIndex(m => m.name === itemName);
+                if (idx === -1) return showNotification('Menu item not found', 'error');
+                menu[idx].stock = Number(newStock || 0);
+                await saveMenuItems(menu);
+                showNotification(`Stock updated for ${itemName}`);
+                // refresh the page UI
+                await loadMenuItems();
+            } catch (e) {
+                console.error('Failed to update stock', e);
+                showNotification('Failed to update stock', 'error');
+            }
+        }
+
+        // Keep product list in sync across tabs when menu changes
+        window.addEventListener('storage', function(e){
+            if (e.key === 'kitchencraft_menu') {
+                // reload menu when menu storage changes
+                loadMenuItems().catch(()=>{});
+            }
+        });
+    </script>
+</body>
+</html>

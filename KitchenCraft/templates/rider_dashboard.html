@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KitchenCraft - Rider Dashboard</title>
+    <link rel="stylesheet" href="../static/css/style.css">
+</head>
+<body>
+    <header>
+        <div class="container header-container">
+            <div class="logo">
+                <img src="/static/images/logo.png" alt="KitchenCraft" class="logo-icon">
+                KitchenCraft
+            </div>
+            <nav>
+                <ul>
+                    <li><a href="/index.html">Home</a></li>
+                    <li><a href="rider_dashboard.html">Rider Dashboard</a></li>
+                    <li><a href="contact.html">Contact</a></li>
+                </ul>
+            </nav>
+            <div id="auth-links" class="auth-links"></div>
+            <button id="theme-toggle" class="theme-toggle">🌙</button>
+        </div>
+    </header>
+
+    <main>
+        <div class="container">
+            <h1 class="page-title">Rider Dashboard</h1>
+
+            <section class="menu-category">
+                <h2 class="section-title">Assigned Orders</h2>
+                <div id="assigned-orders-list"></div>
+            </section>
+
+            <section class="menu-category">
+                <h2 class="section-title">Delivery History (Delivered)</h2>
+                <div id="delivered-orders-list"></div>
+            </section>
+
+            <section class="menu-category">
+                <h2 class="section-title">Delivery History (Cancelled)</h2>
+                <div id="cancelled-orders-list"></div>
+            </section>
+        </div>
+    </main>
+
+    <footer>
+        <div class="container footer-content">
+            <p>&copy; 2025 KitchenCraft. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <!-- Rider Review Modal (read-only) -->
+    <div id="riderReviewModal" class="modal" aria-hidden="true">
+        <div class="modal-content">
+            <button class="close-modal" id="riderReviewModalClose" aria-label="Close">&times;</button>
+            <h3 id="riderReviewModalTitle">Order Reviews</h3>
+            <div id="riderReviewModalBody">
+                <!-- Reviews will be rendered here -->
+            </div>
+            <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:12px;">
+                <button class="btn btn-secondary" id="riderReviewModalCloseBtn">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="../backend/store.js"></script>
+    <script src="../static/js/script.js"></script>
+    <script>
+        // Rider review modal helpers
+        function renderStars(rating) {
+            const max = 5;
+            let out = '';
+            for (let i = 1; i <= max; i++) {
+                out += i <= rating ? '<span class="star">★</span>' : '<span class="star muted">★</span>';
+            }
+            return out;
+        }
+
+        async function openRiderReviewModal(order) {
+            try {
+                const modal = document.getElementById('riderReviewModal');
+                const body = document.getElementById('riderReviewModalBody');
+                const title = document.getElementById('riderReviewModalTitle');
+                if (!modal || !body) return;
+                title.textContent = `Order ${order.id} — Reviews`;
+                body.innerHTML = '';
+
+                // Prefer per-order embedded reviews; fall back to global lists filtered to this order
+                let productReviews = (order.reviews || []);
+                if (!productReviews.length) {
+                    try {
+                        const all = await loadReviews();
+                        productReviews = (all || []).filter(r => String(r.orderId) === String(order.id));
+                    } catch (e) { productReviews = []; }
+                }
+
+                let riderReviews = (order.riderReviews || []);
+                if (!riderReviews.length) {
+                    try {
+                        const allr = await loadRiderReviews();
+                        riderReviews = (allr || []).filter(rr => String(rr.orderId) === String(order.id));
+                    } catch (e) { riderReviews = []; }
+                }
+
+                // (Product reviews intentionally omitted in rider view)
+
+                // Rider reviews
+                const riderHeader = document.createElement('h4');
+                riderHeader.textContent = 'Rider Reviews';
+                body.appendChild(riderHeader);
+
+                const riderList = document.createElement('div');
+                riderList.className = 'review-list';
+                riderReviews.forEach(rr => {
+                    const row = document.createElement('div');
+                    row.className = 'review-row';
+                    row.innerHTML = `
+                        <div class="review-item"><strong>Rider: ${rr.rider}</strong></div>
+                        <div class="review-rating">${renderStars(rr.rating)} <span class="review-meta">by ${rr.customer} • ${new Date(rr.time).toLocaleString()}</span></div>
+                        <div class="review-comment">${rr.comment ? `<em>${rr.comment}</em>` : '<span class="muted">No comment</span>'}</div>
+                    `;
+                    riderList.appendChild(row);
+                });
+                if (!riderReviews.length) riderList.innerHTML = '<p class="no-reviews">No rider reviews for this order.</p>';
+                body.appendChild(riderList);
+
+                // show modal
+                modal.style.display = 'block';
+                modal.setAttribute('aria-hidden', 'false');
+
+                // attach close handlers (overwrite to avoid duplicates)
+                const closeBtn = document.getElementById('riderReviewModalClose');
+                const closeBtn2 = document.getElementById('riderReviewModalCloseBtn');
+                function closeHandler() { modal.style.display = 'none'; modal.setAttribute('aria-hidden', 'true'); }
+                if (closeBtn) { closeBtn.onclick = closeHandler; }
+                if (closeBtn2) { closeBtn2.onclick = closeHandler; }
+
+                // close when clicking outside
+                modal.onclick = function(e) { if (e.target === modal) { closeHandler(); } };
+            } catch (e) { console.error('openRiderReviewModal error', e); }
+        }
+    </script>
+    <script>
+        document.addEventListener('DOMContentLoaded', async function() {
+            const user = getCurrentUser();
+            if (!user) {
+                showNotification('Please login as a rider to access this page', 'error');
+                setTimeout(() => { try { window.location.href = resolveTemplatePath('login.html'); } catch (e) { window.location.href = 'templates/login.html'; } }, 900);
+                return;
+            }
+            if ((user.role || '').toLowerCase() !== 'rider') {
+                showNotification('Rider access required', 'error');
+                setTimeout(() => { try { window.location.href = resolveTemplatePath('index.html'); } catch (e) { window.location.href = '/index.html'; } }, 900);
+                return;
+            }
+
+            await renderRiderOrders(user.username);
+            // refresh periodically to pick up updates
+            setInterval(() => renderRiderOrders(user.username), 8000);
+        });
+
+        async function renderRiderOrders(riderUsername) {
+            try {
+                const all = await getOrders();
+                if (!all) return;
+
+                // Assigned orders: orders assigned to this rider and not delivered/cancelled
+                // Assigned: only orders still active for the rider (exclude delivered/cancelled)
+                const assigned = (all || []).filter(o => o.assignedRider === riderUsername && !['delivered','cancelled'].includes((o.status || '').toString().toLowerCase()));
+                const delivered = (all || []).filter(o => o.assignedRider === riderUsername && (o.status || '').toString().toLowerCase() === 'delivered');
+                const cancelled = (all || []).filter(o => o.assignedRider === riderUsername && (o.status || '').toString().toLowerCase() === 'cancelled');
+
+                const assignedContainer = document.getElementById('assigned-orders-list');
+                const deliveredContainer = document.getElementById('delivered-orders-list');
+                const cancelledContainer = document.getElementById('cancelled-orders-list');
+
+                assignedContainer.innerHTML = '';
+                deliveredContainer.innerHTML = '';
+                cancelledContainer.innerHTML = '';
+
+                if (!assigned.length) assignedContainer.innerHTML = '<p class="no-orders">No active assignments.</p>';
+                if (!delivered.length) deliveredContainer.innerHTML = '<p class="no-orders">No delivered orders yet.</p>';
+                if (!cancelled.length) cancelledContainer.innerHTML = '<p class="no-orders">No cancelled orders.</p>';
+
+                assigned.sort((a,b) => new Date(a.orderTime) - new Date(b.orderTime));
+                delivered.sort((a,b) => new Date(b.orderTime) - new Date(a.orderTime));
+                cancelled.sort((a,b) => new Date(b.orderTime) - new Date(a.orderTime));
+
+                assigned.forEach(o => {
+                    const card = document.createElement('div');
+                    card.className = 'order-card';
+                    card.innerHTML = `
+                        <div class="order-card-header">
+                            <div class="order-info">
+                                <h3>Order ${o.id}</h3>
+                                <div class="order-time">${new Date(o.orderTime).toLocaleString()}</div>
+                            </div>
+                            <div style="text-align:right;">
+                                <div class="order-status-badge status-${o.status}">${o.status}</div>
+                            </div>
+                        </div>
+                        <div class="order-items">${(o.items||[]).map(it => `<div>${it.name} x${it.quantity||1}</div>`).join('')}</div>
+                        <div class="order-total">Total: ₱${(o.total||0).toFixed(2)}</div>
+                        <div class="status-controls">
+                            ${o.status === 'ready' ? `<button class="btn" data-action="pickedup" data-order="${o.id}">Mark Picked Up</button>` : ''}
+                            ${o.status === 'pickedup' ? `<button class="btn" data-action="delivered" data-order="${o.id}">Mark Delivered</button>` : ''}
+                            <button class="btn btn-secondary view-receipt-btn" data-action="view" data-order="${o.id}">View Receipt</button>
+                        </div>
+                    `;
+
+                    assignedContainer.appendChild(card);
+                });
+
+                delivered.forEach(o => {
+                    const card = document.createElement('div');
+                    card.className = 'order-history-card delivered';
+                    card.innerHTML = `
+                        <div><strong>Order ${o.id}</strong> • ${new Date(o.orderTime).toLocaleString()}</div>
+                        <div>${(o.items||[]).map(it => `${it.name} x${it.quantity||1}`).join(', ')}</div>
+                        <div>Total: ₱${(o.total||0).toFixed(2)}</div>
+                        <div class="status-controls">
+                            <button class="btn btn-secondary view-receipt-btn" data-order="${o.id}">View Receipt</button>
+                            <button class="btn btn-secondary view-review-btn" data-order="${o.id}">View Reviews</button>
+                        </div>
+                    `;
+                    deliveredContainer.appendChild(card);
+                });
+
+                cancelled.forEach(o => {
+                    const card = document.createElement('div');
+                    card.className = 'order-history-card cancelled';
+                    card.innerHTML = `
+                        <div><strong>Order ${o.id}</strong> • ${new Date(o.orderTime).toLocaleString()}</div>
+                        <div>${(o.items||[]).map(it => `${it.name} x${it.quantity||1}`).join(', ')}</div>
+                        <div>Total: ₱${(o.total||0).toFixed(2)}</div>
+                        <div class="status-controls">
+                            <button class="btn btn-secondary view-receipt-btn" data-order="${o.id}">View Receipt</button>
+                        </div>
+                    `;
+                    cancelledContainer.appendChild(card);
+                });
+
+                // attach button handlers for assigned actions (picked up / delivered / view)
+                document.querySelectorAll('#assigned-orders-list .status-controls button').forEach(btn => {
+                    btn.addEventListener('click', async function() {
+                            const action = this.dataset.action;
+                            const orderId = this.dataset.order;
+                            if (action === 'view') {
+                                // open receipt
+                                const all = await getOrders();
+                                const o = all.find(x => String(x.id) === String(orderId));
+                                let customer = null;
+                                try { customer = (await loadUsers()).find(u => u.username === o.customer) || null; } catch(e){}
+                                if (o && typeof openReceiptWindow === 'function') openReceiptWindow(o, customer);
+                                return;
+                            }
+
+                            if (action === 'pickedup') {
+                                // Confirm before marking as picked up
+                                if (!confirm('Confirm you have picked up this order? This will update the order status to "pickedup".')) return;
+                                const ok = await updateOrderStatus(orderId, 'pickedup');
+                                if (ok) showNotification('Marked picked up', 'success');
+                            } else if (action === 'delivered') {
+                                // Confirm before marking as delivered
+                                if (!confirm('Confirm delivery? This will mark the order as delivered and move it to your delivery history.')) return;
+                                const ok = await updateOrderStatus(orderId, 'delivered');
+                                if (ok) showNotification('Marked delivered', 'success');
+                            }
+
+                            // Re-render lists — delivered orders will no longer appear in assigned list
+                            await renderRiderOrders(riderUsername);
+                        });
+                });
+
+                // attach view-receipt handlers for delivered/cancelled lists
+                document.querySelectorAll('.view-receipt-btn').forEach(btn => {
+                    btn.addEventListener('click', async function() {
+                        const orderId = this.dataset.order;
+                        const all = await getOrders();
+                        const o = all.find(x => String(x.id) === String(orderId));
+                        let customer = null;
+                        try { customer = (await loadUsers()).find(u => u.username === o.customer) || null; } catch(e){}
+                        if (o && typeof openReceiptWindow === 'function') openReceiptWindow(o, customer);
+                    });
+                });
+
+                // attach view-review handlers for delivered orders
+                document.querySelectorAll('.view-review-btn').forEach(btn => {
+                    btn.addEventListener('click', async function() {
+                        const orderId = this.dataset.order;
+                        const all = await getOrders();
+                        const o = all.find(x => String(x.id) === String(orderId));
+                        if (!o) return;
+                        await openRiderReviewModal(o);
+                    });
+                });
+
+            } catch (err) {
+                console.error('Error rendering rider orders', err);
+            }
+        }
+    </script>
+</body>
+</html>

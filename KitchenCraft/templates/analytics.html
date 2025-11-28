@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>KitchenCraft - Admin Analytics</title>
+  <link rel="stylesheet" href="../static/css/style.css">
+</head>
+<body>
+  <header>
+    <div class="container header-container">
+      <div class="logo">
+        <img src="/static/images/logo.png" alt="KitchenCraft" class="logo-icon">
+        KitchenCraft
+      </div>
+      <nav>
+        <ul>
+          <li><a href="/index.html">Home</a></li>
+          <li><a href="adminmenu.html">Manage Products</a></li>
+          <li><a href="manage_users.html">Manage Users</a></li>
+          <li><a href="admin_orders.html">Orders</a></li>
+          <li><a href="analytics.html">Analytics</a></li>
+        </ul>
+      </nav>
+      <button id="theme-toggle" class="theme-toggle">🌙</button>
+    </div>
+  </header>
+
+  <main>
+    <div class="container">
+      <h1 class="page-title">Admin Analytics</h1>
+
+      <div id="analytics-grid">
+        <section class="management-section summary-cards">
+          <div class="summary-cards-grid">
+            <div class="stat-card">
+              <div class="card-title">Total Revenue</div>
+              <div class="card-value" id="stat-revenue">₱0.00</div>
+            </div>
+            <div class="stat-card">
+              <div class="card-title">Total Orders</div>
+              <div class="card-value" id="stat-total-orders">0</div>
+            </div>
+            <div class="stat-card">
+              <div class="card-title">Average Order</div>
+              <div class="card-value" id="stat-avg-order">₱0.00</div>
+            </div>
+          </div>
+          <div class="summary-small">
+            <p><strong>Completed / Delivered:</strong> <span id="stat-completed">0</span></p>
+            <p><strong>Cancelled:</strong> <span id="stat-cancelled">0</span></p>
+          </div>
+        </section>
+
+        <section class="management-section charts-row">
+          <div class="chart-card">
+            <h3>Top Items (by quantity sold)</h3>
+            <div>
+              <canvas id="chart-top-items" width="600" height="300" aria-label="Top items sold chart"></canvas>
+            </div>
+          </div>
+          <div class="chart-card">
+            <h3>Revenue Over Time</h3>
+            <div>
+              <canvas id="chart-revenue" width="600" height="300" aria-label="Revenue over time chart"></canvas>
+            </div>
+          </div>
+        </section>
+
+        <!-- Inventory moved to Manage Products page for editing by admins -->
+
+        <section class="management-section">
+          <h3>Rider Performance</h3>
+          <div id="rider-performance"></div>
+        </section>
+
+        <section class="management-section">
+          <h3>Ratings Overview</h3>
+          <div class="ratings-charts">
+            <div class="chart-card">
+              <h4>Product Average Ratings</h4>
+              <div>
+                <canvas id="chart-product-ratings" width="600" height="260" aria-label="Product ratings chart"></canvas>
+              </div>
+            </div>
+            <div class="chart-card">
+              <h4>Rider Ratings</h4>
+              <div>
+                <canvas id="chart-rider-ratings" width="600" height="260" aria-label="Rider ratings chart"></canvas>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+  </main>
+
+  <footer>
+    <div class="container footer-content">
+      <p>&copy; 2025 KitchenCraft. All rights reserved.</p>
+    </div>
+  </footer>
+
+  <script src="../backend/store.js"></script>
+  <script src="../static/js/script.js"></script>
+  <!-- Chart.js CDN for charts -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="../static/js/analytics.js"></script>
+</body>
+</html>

@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KitchenCraft - Orders</title>
+    <link rel="stylesheet" href="../static/css/style.css">
+</head>
+<body>
+    <header>
+        <div class="container header-container">
+            <div class="logo">
+                <img src="/static/images/logo.png" alt="KitchenCraft" class="logo-icon">
+                KitchenCraft
+            </div>
+            <nav>
+                <ul>
+                    <li><a href="/index.html">Home</a></li>
+                    <li><a href="adminmenu.html">Products</a></li>
+                    <li><a href="manage_users.html">Manage Users</a></li>
+                    <li><a href="admin_orders.html">Orders</a></li>
+                    <li><a href="analytics.html">Analytics</a></li>
+                </ul>
+            </nav>
+            <div id="auth-links" class="auth-links"></div>
+            <button id="theme-toggle" class="theme-toggle">🌙</button>
+        </div>
+    </header>
+
+    <main>
+        <div class="container">
+            <h1 class="page-title">Orders Management</h1>
+
+            <section class="order-management-container">
+                <div id="orders-list">
+                    <!-- Orders will be rendered here -->
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <footer>
+        <div class="container footer-content">
+            <p>&copy; 2025 KitchenCraft. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <script src="../backend/store.js"></script>
+    <script src="../static/js/script.js"></script>
+    <script>
+        // Helper: resolve a rider username to a display name (fullName when available)
+        function resolveDisplayName(username) {
+            try {
+                if (!username) return '';
+                if (typeof getUsersSync === 'function') {
+                    const users = getUsersSync() || [];
+                    const u = users.find(x => x.username === username);
+                    return (u && (u.fullName || u.username)) || username;
+                }
+
+                // show placeholders when sections are empty
+                const activeContainer = document.getElementById('active-orders');
+                const completedContainer = document.getElementById('delivered-orders');
+                if (activeContainer && activeContainer.children.length === 0) {
+                    activeContainer.innerHTML = '<p class="no-orders">No active orders.</p>';
+                }
+                if (completedContainer && completedContainer.children.length === 0) {
+                    completedContainer.innerHTML = '<p class="no-orders">No delivered orders yet.</p>';
+                }
+                return username;
+            } catch (e) { return username || ''; }
+        }
+
+        // Admin orders page: list orders and allow status updates
+        document.addEventListener('DOMContentLoaded', async function() {
+            if (!isRole('admin')) {
+                showNotification('Admin access required');
+                setTimeout(() => { try { window.location.href = resolveTemplatePath('login.html'); } catch (e) { window.location.href = 'templates/login.html'; } }, 1000);
+                return;
+            }
+
+            await renderOrders();
+
+            // Auto-refresh periodically to show updates
+            setInterval(renderOrders, 8000);
+
+            // Also listen for storage changes so updates made in other tabs/windows
+            // (for example, by riders or admins in different sessions) are reflected immediately.
+            window.addEventListener('storage', function(e) {
+                try {
+                    if (!e || !e.key) return;
+                    if (e.key === 'kitchencraft_orders' || e.key === 'kitchencraft_orders') {
+                        renderOrders();
+                    }
+                } catch (err) { console.error('Storage event handler error', err); }
+            });
+        });
+
+        async function renderOrders() {
+            const container = document.getElementById('orders-list');
+            // Create separate containers for active and completed orders
+            container.innerHTML = '';
+            container.innerHTML = `
+                <div id="active-orders-section">
+                    <h2>Active Orders</h2>
+                    <div id="active-orders"></div>
+                </div>
+                <div id="cancelled-orders-section">
+                    <h2>Cancelled Orders</h2>
+                    <div id="cancelled-orders"></div>
+                </div>
+                <div id="delivered-orders-section">
+                    <h2>Delivered Orders</h2>
+                    <div id="delivered-orders"></div>
+                </div>
+            `;
+
+            try {
+                const orders = await getOrders();
+                if (!orders || orders.length === 0) {
+                    container.innerHTML = '<p class="no-orders">No orders found.</p>';
+                    return;
+                }
+
+                // Sort by newest first
+                orders.sort((a,b) => new Date(b.orderTime) - new Date(a.orderTime));
+
+                // helper to create status select
+                const statuses = ['placed','preparing','ready','pickedup','delivered','cancelled'];
+
+                for (const order of orders) {
+                    const card = document.createElement('div');
+                    card.className = 'order-card';
+
+                    // Build order details HTML
+                    const itemsHtml = (order.items || []).map(it => `<div class="order-item">${it.name} x ${it.quantity || 1}</div>`).join('');
+
+                    card.innerHTML = `
+                        <div class="order-header">Order #${order.id} <span class="order-time">${new Date(order.orderTime).toLocaleString()}</span></div>
+                        <div class="order-customer">Customer: ${resolveDisplayName(order.customer)} ${order.customer ? `(${order.customer})` : ''}</div>
+                        <div class="order-items">${itemsHtml}</div>
+                        <div class="order-total">Total: ₱${(order.total||0).toFixed(2)}</div>
+                        <div class="order-controls">
+                            <div class="rider-assignment" data-order-id="${order.id}"></div>
+                            <div class="assigned-rider" data-order-id="${order.id}"></div>
+                            <select class="status-select" data-order-id="${order.id}"></select>
+                            <button class="update-status-btn" data-order-id="${order.id}">Update</button>
+                            <button class="btn btn-secondary view-receipt-btn" data-order-id="${order.id}">View Receipt</button>
+                        </div>
+                    `;
+
+                    // append to proper container based on status
+                    let targetContainer = document.getElementById('active-orders');
+                    // Delivered orders should appear in the Delivered Orders section
+                    if (order.status === 'delivered') targetContainer = document.getElementById('delivered-orders');
+                    if (order.status === 'cancelled') targetContainer = document.getElementById('cancelled-orders');
+                    if (targetContainer) targetContainer.appendChild(card);
+
+                    // populate status select
+                    const statusSelect = card.querySelector('.status-select');
+                    statuses.forEach(s => {
+                        const o = document.createElement('option');
+                        o.value = s;
+                        o.textContent = s.charAt(0).toUpperCase() + s.slice(1);
+                        if (s === order.status) o.selected = true;
+                        statusSelect.appendChild(o);
+                    });
+
+                    // If order is completed/delivered/cancelled we should not show editable controls
+                    // — show a static status badge and the assigned rider instead.
+                    const updateBtnShortcut = card.querySelector('.update-status-btn');
+                    const viewBtnShortcut = card.querySelector('.view-receipt-btn');
+                    if (['delivered','cancelled'].includes((order.status||'').toLowerCase())) {
+                        // hide editable controls
+                        if (statusSelect) statusSelect.style.display = 'none';
+                        if (updateBtnShortcut) updateBtnShortcut.style.display = 'none';
+
+                        // show status badge
+                        const badge = document.createElement('span');
+                        badge.className = 'status-badge';
+                        // add a variant class (e.g. 'delivered' or 'cancelled') so CSS can style the text color
+                        const statusClass = ((order.status || '') + '').toLowerCase();
+                        if (statusClass) badge.classList.add(statusClass);
+                        badge.textContent = (order.status || '').charAt(0).toUpperCase() + (order.status || '').slice(1);
+                        badge.style.marginRight = '12px';
+                        // insert badge before view button
+                        const controls = card.querySelector('.order-controls');
+                        if (controls && viewBtnShortcut) controls.insertBefore(badge, viewBtnShortcut);
+
+                        // ensure rider display is visible (initRiderUI will set text); hide assignment selector
+                        const riderAssign = card.querySelector('.rider-assignment');
+                        if (riderAssign) riderAssign.style.display = 'none';
+                    }
+
+                    // init rider UI according to the requested rules
+                    (async function initRiderUI(orderObj, cardElem) {
+                        try {
+                            const riderContainer = cardElem.querySelector(`.rider-assignment[data-order-id="${orderObj.id}"]`);
+                            const assignedDisplay = cardElem.querySelector(`.assigned-rider[data-order-id="${orderObj.id}"]`);
+
+                            // Default hide both
+                            if (riderContainer) riderContainer.style.display = 'none';
+                            if (assignedDisplay) assignedDisplay.textContent = '';
+
+                            if (orderObj.status === 'placed' || orderObj.status === 'cancelled') {
+                                // show nothing
+                                return;
+                            }
+
+                            // Note: rider assignment selection is only shown when status is 'ready'
+
+                            // ready -> allow admin to assign rider AFTER status changed to ready
+                            if (orderObj.status === 'ready') {
+                                const users = await loadUsers();
+                                const riders = (users || []).filter(u => (u.role || '').toLowerCase() === 'rider');
+                                if (!riders.length) {
+                                    if (assignedDisplay) assignedDisplay.textContent = orderObj.assignedRider ? resolveDisplayName(orderObj.assignedRider) : '(No riders available)';
+                                    if (riderContainer) riderContainer.style.display = 'none';
+                                    return;
+                                }
+
+                                // If a rider is already assigned, show the assigned name and hide selector
+                                if (orderObj.assignedRider) {
+                                    if (assignedDisplay) assignedDisplay.textContent = resolveDisplayName(orderObj.assignedRider);
+                                    if (riderContainer) riderContainer.style.display = 'none';
+                                    return;
+                                }
+
+                                // If not assigned yet, show a selector so admin can assign after status is Ready
+                                const selReady = document.createElement('select');
+                                selReady.className = 'rider-select';
+                                riders.forEach(r => {
+                                    const opt = document.createElement('option');
+                                    opt.value = r.username;
+                                    opt.textContent = r.fullName || r.username;
+                                    selReady.appendChild(opt);
+                                });
+
+                                riderContainer.innerHTML = '<label class="assign-label">Assign rider:</label>';
+                                riderContainer.appendChild(selReady);
+                                riderContainer.style.display = 'inline-block';
+                                if (assignedDisplay) assignedDisplay.textContent = '';
+                                return;
+                            }
+
+                            // pickedup / delivered -> show assigned name (if any) and do NOT allow changing rider
+                            if (['pickedup','delivered'].includes(orderObj.status)) {
+                                if (orderObj.assignedRider) {
+                                    if (assignedDisplay) assignedDisplay.textContent = resolveDisplayName(orderObj.assignedRider);
+                                } else {
+                                    if (assignedDisplay) assignedDisplay.textContent = '(Unassigned)';
+                                }
+                                if (riderContainer) riderContainer.style.display = 'none';
+                                return;
+                            }
+                        } catch (err) {
+                            console.error('initRiderUI error', err);
+                        }
+                    })(order, card);
+
+                    // status change handler — show/hide selector as admin chooses statuses
+                    statusSelect.addEventListener('change', async (e) => {
+                        const newStatus = statusSelect.value;
+                        const riderContainer = card.querySelector(`.rider-assignment[data-order-id="${order.id}"]`);
+                        const assignedDisplay = card.querySelector(`.assigned-rider[data-order-id="${order.id}"]`);
+
+                        if (newStatus === 'ready') {
+                            // if already has assigned rider, show name; else show selector for admin to pick
+                            if (order.assignedRider) {
+                                if (assignedDisplay) assignedDisplay.textContent = resolveDisplayName(order.assignedRider);
+                                return;
+                            }
+
+                            const users = await loadUsers();
+                            const riders = (users || []).filter(u => (u.role || '').toLowerCase() === 'rider');
+                            if (!riders.length) {
+                                showNotification('No riders available. Please add rider users first.', 'error');
+                                return;
+                            }
+
+                            const sel = document.createElement('select');
+                            sel.className = 'rider-select';
+                            riders.forEach(r => {
+                                const opt = document.createElement('option');
+                                opt.value = r.username;
+                                opt.textContent = r.fullName || r.username;
+                                sel.appendChild(opt);
+                            });
+
+                            if (riderContainer) {
+                                riderContainer.innerHTML = '<label class="assign-label">Assign rider:</label>';
+                                riderContainer.appendChild(sel);
+                                riderContainer.style.display = 'inline-block';
+                            }
+                            if (assignedDisplay) assignedDisplay.textContent = '';
+                        }
+                        // For other status changes we intentionally do not auto-hide/show the rider selector here.
+                        // The selector will only be hidden when Update is clicked and the status change persists (renderOrders() will refresh the UI).
+                    });
+
+                        // update button
+                    const updateBtn = card.querySelector('.update-status-btn');
+                    updateBtn.addEventListener('click', async () => {
+                        const newStatus = card.querySelector('.status-select').value;
+
+                        try {
+                            const all = await getOrders();
+                            const idx = all.findIndex(o => String(o.id) === String(order.id));
+                            if (idx === -1) return showNotification('Order not found', 'error');
+                            const orderObj = all[idx];
+                            const riderContainer = card.querySelector('.rider-assignment');
+                            const existingSelect = riderContainer && riderContainer.querySelector('select');
+
+                            // If an inline selector is present (admin assigned), capture the selection
+                            if (existingSelect) {
+                                const selected = existingSelect.value;
+                                orderObj.assignedRider = selected;
+                                await saveOrdersToStorage(all);
+                            }
+
+                            // Prevent marking Picked Up unless a rider is assigned
+                            if (newStatus === 'pickedup' && !orderObj.assignedRider) {
+                                showNotification('Please assign a rider before marking Picked Up.', 'error');
+                                return;
+                            }
+
+                            const ok = await updateOrderStatus(order.id, newStatus);
+                            if (ok) await renderOrders();
+                        } catch (err) {
+                            console.error(err);
+                            showNotification('Failed to update order', 'error');
+                        }
+                    });
+
+                    // view receipt button
+                    const viewBtn = card.querySelector('.view-receipt-btn');
+                    if (viewBtn) {
+                        viewBtn.addEventListener('click', async () => {
+                            try {
+                                // find the fresh order data and customer
+                                const allOrders = await getOrders();
+                                const o = allOrders.find(x => String(x.id) === String(order.id));
+                                if (!o) return showNotification('Order not found', 'error');
+
+                                // try to resolve customer details
+                                let customer = null;
+                                try {
+                                    const users = await loadUsers();
+                                    customer = (users || []).find(u => u.username === o.customer) || null;
+                                } catch (e) {
+                                    // ignore - customer may be unavailable
+                                }
+
+                                // open popup receipt using the shared helper from script.js
+                                if (typeof openReceiptWindow === 'function') {
+                                    openReceiptWindow(o, customer);
+                                } else {
+                                    // fallback: show text receipt
+                                    alert(buildOrderReceiptText(o));
+                                }
+                            } catch (err) {
+                                console.error('View receipt error', err);
+                                showNotification('Unable to open receipt', 'error');
+                            }
+                        });
+                    }
+                }
+            } catch (error) {
+                console.error('Error loading orders:', error);
+                container.innerHTML = '<p class="error-message">Failed to load orders.</p>';
+            }
+        }
+    </script>
+</body>
+</html>
